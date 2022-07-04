@@ -21,7 +21,7 @@ with app:
     pass
 
 lock = threading.Lock()
-
+add_produto = []
 ################## MySQL #################
 
 def bd():
@@ -51,19 +51,18 @@ def bd():
         "create table if not exists pchaves("
         "id int auto_increment primary key,"
         "user_cod bigint not null,"
-        "palavras varchar(100) not null)"
+        "produto varchar(100) not null)"
     )
 
 ############## COMANDOS ####################
 
 @app.on_message(filters.private & filters.command("start")) #Resposta para o comando start, que é enviado quando um usuário inicia o bot
 def start(bot, mensagem):
-    m_id = mensagem.id
     user_id = mensagem.chat.id
     fname = str(mensagem.chat.first_name)
 
     registrar(user_id, fname)
-    #helpC(bot, mensagem)
+    helpC(bot, mensagem)
 
 @app.on_message(filters.private & filters.command("help")) #Resposta para o comando help, que consulta a maioria dos comando disponíveis do bot
 def helpC(bot, mensagem):
@@ -71,18 +70,52 @@ def helpC(bot, mensagem):
     fname = mensagem.chat.first_name
 
     btns = [
-        [InlineKeyboardButton("Sorteios", callback_data="help_sorteios"), InlineKeyboardButton("Cupons", callback_data="help_cupons")],
-        [InlineKeyboardButton("Registrar Sorteio", callback_data="help_regsorteio"), InlineKeyboardButton("Apagar sorteio", callback_data="help_rmsorteio")],
-        [InlineKeyboardButton("Sortear", callback_data="help_sortear"), InlineKeyboardButton("Atualizar regras", callback_data="help_atregras")],
-        [InlineKeyboardButton("Indicação", callback_data="help_ind")]
-
+        [InlineKeyboardButton("Cadastrar produto", callback_data="help_cpd")]
     ]
 
     markup = InlineKeyboardMarkup(btns)
 
-    app.send_message(user_id, "Esses são meus comandos, clique neles para usa-los!\n\nPara pegar um cupom, veja os sorteios disponiveis", reply_markup=markup)
+    app.send_message(user_id, "Esses são meus comandos, clique neles para usa-los!", reply_markup=markup)
     print(f"O usuário {fname}({user_id}) consultou os comandos --> /help\n")
 
+@app.on_message(filters.private & filters.command("cadastrar"))
+def cadastrar(bot, mensagem):
+    user_id = mensagem.chat.id
+    fname = mensagem.chat.first_name
+    produto = mensagem.text.replace("/cadastrar")
+    pc = len(bdMap(2, "select * from pchaves where user_cod=%s", [user_id]))
+
+    if not registrado(user_id):
+        registrar(user_id, fname)
+
+    if len(produto) != 1:
+        if pc == 0:
+            bdMap(2, "insert into pchaves(user_cod, produto) values(%s, %s)", [user_id, produto], "insert")
+
+            app.send_message(user_id, f"{produto} registrado!")
+        else:
+            app.send_message(user_id, f"{produto} já está registrado!")
+    else:
+        app.send_message(user_id, "Para cadastrar um novo item, envie:\n\n/cadastrar <nome>", parse_mode=ParseMode.MARKDOWN)
+
+@app.on_message(filters.private)
+def interact(bot, mensagem):
+    user_id = mensagem.chat.id
+    produto = mensagem.text
+
+    ########### Adicionar produto ###########
+
+    if user_id in add_produto:
+        pc = len(bdMap(2, "select * from pchaves where user_cod=%s and produto=%s", [user_id, produto]))
+
+        if pc == 0:
+            bdMap(2, "insert into pchaves(user_cod, produto) values(%s, %s)", [user_id, produto], "insert")
+            app.send_message(user_id, f"{produto} registrado!")
+
+        else:
+            app.send_message(user_id, f"{produto} já está registrado!")
+        
+        add_produto.remove(user_id)
 
 ############# UTILS #############
 
@@ -97,6 +130,14 @@ def registrar(user_id, fname): #Registrar novo usuário
         print(errorrg)
 
     print(f"O usuário {fname}({user_id}) foi registrado\n")
+
+def registrado(user_id):
+    user = bdMap(1, "select * from clientes where cod=%s")
+
+    if len(user) > 0:
+        return True
+    else:
+        return False
 
 def bdMap(c, sql, var=None,  method="select"): #Interações com banco de dados
     cursors = {
@@ -135,6 +176,15 @@ def log(texto):
     with open("log.txt", "a+", encoding="utf-8") as arq:
         arq.write(f"[{datetime.now().strftime('%x %X.%f')}] ")
         arq.write(texto)
+
+############## CALLBACKS ####################
+
+@app.on_callback_query(filters.regex("^help_cpd"))
+def callRpd(bot, call):
+    user_id = call.from_user.id
+
+    add_produto.append(user_id)
+    app.send_message(user_id, "Envie o produto que deseja cadastrar")
 
 ############## INICIALIZAÇÃO ####################
 
