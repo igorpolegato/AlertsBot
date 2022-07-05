@@ -22,6 +22,7 @@ with app:
 
 lock = threading.Lock()
 add_produto = []
+dados = lambda mensagem: [mensagem.chat.id, mensagem.chat.first_name, mensagem.text]
 ################## MySQL #################
 
 def bd():
@@ -70,7 +71,8 @@ def helpC(bot, mensagem):
     fname = mensagem.chat.first_name
 
     btns = [
-        [InlineKeyboardButton("Cadastrar produto", callback_data="help_cpd")]
+        [InlineKeyboardButton("Cadastrar produto", callback_data="help_cpd"), InlineKeyboardButton("Apagar produto", callback_data="help_delpd")],
+        [InlineKeyboardButton("Meus produtos", callback_data="help_mypd")]
     ]
 
     markup = InlineKeyboardMarkup(btns)
@@ -78,30 +80,37 @@ def helpC(bot, mensagem):
     app.send_message(user_id, "Esses são meus comandos, clique neles para usa-los!", reply_markup=markup)
     print(f"O usuário {fname}({user_id}) consultou os comandos --> /help\n")
 
-@app.on_message(filters.private & filters.command("cadastrar"))
-def cadastrar(bot, mensagem):
-    user_id = mensagem.chat.id
-    fname = mensagem.chat.first_name
-    produto = mensagem.text.replace("/cadastrar")
-    pc = len(bdMap(2, "select * from pchaves where user_cod=%s", [user_id]))
+@app.on_message(filters.private & filters.command("consultar"))
+def consultar(bot, mensagem):
+    user_id, fname, text = dados(mensagem)
+    btns = []
+    produtos = [p[0] for p in bdMap(2, "select produto from pchaves where user_cod=%s", [user_id])]
 
-    if not registrado(user_id):
-        registrar(user_id, fname)
+    if len(produtos) > 0:
+        for produto in produtos:
+            btns.append(InlineKeyboardButton(produto))
+        
+        msg = "Esses são os produtos que você possui cadastrado: \n\n" + ', '.join(produtos)
 
-    if len(produto) != 1:
-        if pc == 0:
-            bdMap(2, "insert into pchaves(user_cod, produto) values(%s, %s)", [user_id, produto], "insert")
+        markup = InlineKeyboardMarkup(btns)
 
-            app.send_message(user_id, f"{produto} registrado!")
-        else:
-            app.send_message(user_id, f"{produto} já está registrado!")
+        app.send_message(user_id, msg)
+    
     else:
-        app.send_message(user_id, "Para cadastrar um novo item, envie:\n\n/cadastrar <nome>", parse_mode=ParseMode.MARKDOWN)
+        app.send_message(user_id, "Você não possui produtos cadastrados!")
+
+
+    
+
+
+@app.on_message(filters.command("teste"))
+def teste(bot, mensagem):
+    user_id, fname, produto = dados(mensagem)
+    print(user_id, fname, produto)
 
 @app.on_message(filters.private)
 def interact(bot, mensagem):
-    user_id = mensagem.chat.id
-    produto = mensagem.text
+    user_id, fname, produto = dados(mensagem)
 
     ########### Adicionar produto ###########
 
@@ -111,6 +120,7 @@ def interact(bot, mensagem):
         if pc == 0:
             bdMap(2, "insert into pchaves(user_cod, produto) values(%s, %s)", [user_id, produto], "insert")
             app.send_message(user_id, f"{produto} registrado!")
+            print(f"O usuário {fname}({user_id}) cadastrou um novo produto ({produto})\n")
 
         else:
             app.send_message(user_id, f"{produto} já está registrado!")
@@ -185,6 +195,10 @@ def callRpd(bot, call):
 
     add_produto.append(user_id)
     app.send_message(user_id, "Envie o produto que deseja cadastrar")
+
+@app.on_callback_query(filters.regex("^help_mypd"))
+def callConsultar(bot, call):
+    consultar(bot, call.message)
 
 ############## INICIALIZAÇÃO ####################
 
