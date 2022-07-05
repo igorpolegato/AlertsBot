@@ -88,7 +88,7 @@ def consultar(bot, mensagem):
 
     if len(produtos) > 0:
         for produto in produtos:
-            btns.append(InlineKeyboardButton(produto))
+            btns.append([InlineKeyboardButton(produto)])
         
         msg = "Esses são os produtos que você possui cadastrado: \n\n" + ', '.join(produtos)
 
@@ -98,10 +98,6 @@ def consultar(bot, mensagem):
     
     else:
         app.send_message(user_id, "Você não possui produtos cadastrados!")
-
-
-    
-
 
 @app.on_message(filters.command("teste"))
 def teste(bot, mensagem):
@@ -140,6 +136,26 @@ def registrar(user_id, fname): #Registrar novo usuário
         print(errorrg)
 
     print(f"O usuário {fname}({user_id}) foi registrado\n")
+
+def rList(user_id):
+    produtos = [p[0] for p in bdMap(2, "select produto from pchaves where user_cod=%s", [user_id])]
+    btns = []
+
+    if len(produtos) > 0:
+        for produto in produtos:
+            btns.append([InlineKeyboardButton(produto, callback_data=f"rlist_{produto}")])
+
+        markup = InlineKeyboardMarkup(btns)
+        app.send_message(user_id, "Esses são os produtos que você possui cadastrados!\n\nSelecione o produto que deseja remover", reply_markup=markup)
+    
+    else:
+        app.send_message(user_id, "Você não possui produtos cadastrados!")
+
+def deletePd(user_id, fname, produto):
+    bdMap(2, "delete from pchaves where produto=%s", [produto], "delete")
+
+    app.send_message(user_id, f"{produto} foi removido da sua lista!")
+    print(f"O usuário {fname}({user_id}) removeu um produto da lista ({produto})\n")
 
 def registrado(user_id):
     user = bdMap(1, "select * from clientes where cod=%s")
@@ -189,12 +205,24 @@ def log(texto):
 
 ############## CALLBACKS ####################
 
+@app.on_callback_query(filters.regex("^rlist\S"))
+def callDelete(bot, call):
+    user_id, fname, text = dados(call.message)
+    produto = call.data[6:]
+
+    deletePd(user_id, fname, produto)
+
 @app.on_callback_query(filters.regex("^help_cpd"))
 def callRpd(bot, call):
     user_id = call.from_user.id
 
     add_produto.append(user_id)
     app.send_message(user_id, "Envie o produto que deseja cadastrar")
+
+@app.on_callback_query(filters.regex("^help_delpd"))
+def callRlist(bot, call):
+    user_id, fname, text = dados(call.message)
+    rList(user_id)
 
 @app.on_callback_query(filters.regex("^help_mypd"))
 def callConsultar(bot, call):
