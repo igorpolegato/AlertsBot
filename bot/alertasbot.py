@@ -82,17 +82,17 @@ def helpC(bot, mensagem):
 
 @app.on_message(filters.private & filters.command("consultar"))
 def consultar(bot, mensagem):
-    user_id, fname, text = dados(mensagem)
-    btns = []
+    user_id = dados(mensagem)[0]
+    #btns = []
     produtos = [p[0] for p in bdMap(2, "select produto from pchaves where user_cod=%s", [user_id])]
 
     if len(produtos) > 0:
-        for produto in produtos:
-            btns.append([InlineKeyboardButton(produto)])
+        #for produto in produtos:
+            #btns.append([InlineKeyboardButton(produto)])
         
         msg = "Esses são os produtos que você possui cadastrado: \n\n" + ', '.join(produtos)
 
-        markup = InlineKeyboardMarkup(btns)
+        #markup = InlineKeyboardMarkup(btns)
 
         app.send_message(user_id, msg)
     
@@ -123,6 +123,28 @@ def interact(bot, mensagem):
         
         add_produto.remove(user_id)
 
+@app.on_message(filters.channel)
+def monitor(bot, mensagem):
+    m_id = mensagem.id
+    group_id = mensagem.chat.id
+    title = mensagem.chat.title
+    media = str(mensagem.media).replace("MessageMediaType.", "").lower()
+    url = f"https://t.me/c/{str(group_id)[3:]}/{m_id}"
+    produtos = {p[1]: p[2].split() for p in bdMap(2, "select * from pchaves")}
+
+    if media == "none":
+        text = mensagem.text.lower()
+    
+    else:
+        text = mensagem.caption.lower()
+
+        for k, v in produtos.items():
+            if all(p.lower() in text for p in v):
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Ir para a mensagem", url=url)]])
+
+                app.send_message(k, f"🚨 O produto {' '.join(v)} foi mencionado em {title}.\n\nNão deixe de conferir!", reply_markup=markup)
+    
+    
 ############# UTILS #############
 
 def registrar(user_id, fname): #Registrar novo usuário
@@ -207,7 +229,7 @@ def log(texto):
 
 @app.on_callback_query(filters.regex("^rlist\S"))
 def callDelete(bot, call):
-    user_id, fname, text = dados(call.message)
+    user_id, fname = dados(call.message)[0:2]
     produto = call.data[6:]
 
     deletePd(user_id, fname, produto)
@@ -221,7 +243,7 @@ def callRpd(bot, call):
 
 @app.on_callback_query(filters.regex("^help_delpd"))
 def callRlist(bot, call):
-    user_id, fname, text = dados(call.message)
+    user_id = dados(call.message)[0]
     rList(user_id)
 
 @app.on_callback_query(filters.regex("^help_mypd"))
