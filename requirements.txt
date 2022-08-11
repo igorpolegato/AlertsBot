@@ -1,4 +1,4 @@
-pyrogram
-tgcrypto
-mysql-connector
-pyinstaller
+Pyrogram==2.0.30
+TgCrypto==1.2.3
+mysql-connector-python==8.0.29
+pyinstaller==5.1
