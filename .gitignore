@@ -1,0 +1,10 @@
+*dist*
+*build*
+*cache*
+*pylint*
+.vscode
+
+*.spec
+*log*
+*.session*
+*.ini

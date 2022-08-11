@@ -7,11 +7,12 @@ from data import *
 from datetime import datetime
 from traceback import print_exc
 from random import randrange as rd, choice
+import re
 
 import mysql.connector
 import threading
 
-app = Client("GSorteio",
+app = Client("AlertasBot",
             api_id=api_id,
             api_hash=api_hash,
             bot_token=bot_token)
@@ -84,20 +85,66 @@ def helpC(bot, mensagem):
 def consultar(bot, mensagem):
     user_id = dados(mensagem)[0]
     #btns = []
-    produtos = [p[0] for p in bdMap(2, "select produto from pchaves where user_cod=%s", [user_id])]
+    produtos = [p[0].title() for p in bdMap(2, "select produto from pchaves where user_cod=%s", [user_id])]
 
     if len(produtos) > 0:
         #for produto in produtos:
             #btns.append([InlineKeyboardButton(produto)])
-        
-        msg = "Esses são os produtos que você possui cadastrado: \n\n" + ', '.join(produtos)
+
+        msg = "Sua lista de desejos: \n\n" + '\n'.join(sorted(produtos)) + "\n\nSe deseja adicionar ou remover, utilize os botões abaixo"
 
         #markup = InlineKeyboardMarkup(btns)
 
-        app.send_message(user_id, msg)
+        app.send_message(user_id, msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cadastrar produto", callback_data="help_cpd"), InlineKeyboardButton("Apagar produto", callback_data="help_delpd")]]))
     
     else:
         app.send_message(user_id, "Você não possui produtos cadastrados!")
+
+@app.on_message(filters.private & filters.command("enviar")) #Resposta para o comando enviar, que envia a mensagem para todos os usuários cadastrados
+def enviar(bot, mensagem):
+    user_id = mensagem.chat.id
+
+    mensagem = mensagem.reply_to_message
+
+    if user_id == adm_id:
+        media = str(mensagem.media).replace("MessageMediaType.", "").lower()
+        users = [u[2] for u in bdMap(1, "select * from clientes")]
+
+        if user_id in users:
+            users.remove(user_id)
+        met = {
+            "text": app.send_message,
+            "video": app.send_video,
+            "photo": app.send_photo,
+            "document": app.send_document
+        }
+
+        if media == "none":
+            text = mensagem.text.replace("/enviar", "")
+
+            for user in users:
+                met['text'](user, text)
+                print(f"Mensagem encaminhada para {user}\n")
+
+        else:
+            types = {
+                    "video": mensagem.video,
+                    "photo": mensagem.photo,
+                    "document": mensagem.document
+            }
+
+            if mensagem.caption is not None:
+                text = mensagem.caption.replace("/enviar ", "")
+
+                for user in users:
+                    met[media](user, types[media].file_id, caption=text)
+                    print(f"Mensagem encaminhada para {user}\n")
+            else:
+                for user in users:
+                    met[media](user, types[media].file_id)
+                    print(f"Mensagem encaminhada para {user}\n")
+
+
 
 @app.on_message(filters.command("teste"))
 def teste(bot, mensagem):
@@ -106,43 +153,67 @@ def teste(bot, mensagem):
 
 @app.on_message(filters.private)
 def interact(bot, mensagem):
-    user_id, fname, produto = dados(mensagem)
+    user_id, fname, produtos = dados(mensagem)
 
     ########### Adicionar produto ###########
 
     if user_id in add_produto:
-        pc = len(bdMap(2, "select * from pchaves where user_cod=%s and produto=%s", [user_id, produto]))
+        produtos = [p.strip().title() for p in produtos.split(",")]
 
-        if pc == 0:
-            bdMap(2, "insert into pchaves(user_cod, produto) values(%s, %s)", [user_id, produto], "insert")
-            app.send_message(user_id, f"{produto} registrado!")
-            print(f"O usuário {fname}({user_id}) cadastrou um novo produto ({produto})\n")
+        for produto in produtos:
+            pc = len(bdMap(2, "select * from pchaves where user_cod=%s and produto=%s", [user_id, produto]))
 
-        else:
-            app.send_message(user_id, f"{produto} já está registrado!")
-        
+            if pc == 0:
+                bdMap(2, "insert into pchaves(user_cod, produto) values(%s, %s)", [user_id, produto], "insert")
+                app.send_message(user_id, f"{produto} registrado!")
+                print(f"O usuário {fname}({user_id}) cadastrou um novo produto ({produto})\n")
+
+            else:
+                app.send_message(user_id, f"{produto} já está registrado!")
+            
         add_produto.remove(user_id)
 
 @app.on_message(filters.channel)
 def monitor(bot, mensagem):
-    m_id = mensagem.id
     group_id = mensagem.chat.id
-    title = mensagem.chat.title
-    media = str(mensagem.media).replace("MessageMediaType.", "").lower()
-    url = f"https://t.me/c/{str(group_id)[3:]}/{m_id}"
-    produtos = {p[1]: p[2].split() for p in bdMap(2, "select * from pchaves")}
 
-    if media == "none":
-        text = mensagem.text.lower()
-    
-    else:
-        text = mensagem.caption.lower()
+    if group_id == -1001429192579:
+        m_id = mensagem.id
+        title = mensagem.chat.title
+        media = str(mensagem.media).replace("MessageMediaType.", "").lower()
+        url = f"https://t.me/c/{str(group_id)[3:]}/{m_id}"
+        produtos = {}
 
+        for p in bdMap(2, "select * from pchaves"):
+            
+            if p[1] not in produtos.keys():
+                produtos[p[1]]= []
+
+            if p[2] not in produtos[p[1]]:
+                produtos[p[1]].append(p[2])
+
+        if media == "none":
+            text = mensagem.text.lower()
+        
+        else:
+            text = mensagem.caption.lower()
+        
         for k, v in produtos.items():
-            if all(p.lower() in text for p in v):
-                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Ir para a mensagem", url=url)]])
+            if any(re.search(f'\s{p}\s|^{p}$|^{p}\s|\s{p}$', text.lower(), re.IGNORECASE) for p in v):
+                ch = []
+                for p in v:
+                    if len(p) > 0:
+                        if all(pch.lower() in text.lower() for pch in p.split()):
+                            ch.append(str(p.upper()))
 
-                app.send_message(k, f"🚨 O produto {' '.join(v)} foi mencionado em {title}.\n\nNão deixe de conferir!", reply_markup=markup)
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("❇️ Ir para a oferta", url=url)]])
+
+                for c in ch:
+                    try:
+                        app.send_message(k, "🚨" + '"' + c + '" ' f"encontramos uma oferta no canal {title}.\n\nNão deixe de conferir!", reply_markup=markup)
+                        print(f"Oferta de {c} encaminhada para {k}\n")
+                    except Exception:
+                        print("Falha ao enviar, o usúario bloqueou o bot!")
     
     
 ############# UTILS #############
@@ -238,8 +309,10 @@ def callDelete(bot, call):
 def callRpd(bot, call):
     user_id = call.from_user.id
 
-    add_produto.append(user_id)
-    app.send_message(user_id, "Envie o produto que deseja cadastrar")
+    if user_id not in add_produto:
+        add_produto.append(user_id)
+
+    app.send_message(user_id, "Digite os produtos do seu interesse, separados por VIRGULA:\n\nEx: iphone, geladeira, Televisão")
 
 @app.on_callback_query(filters.regex("^help_delpd"))
 def callRlist(bot, call):
