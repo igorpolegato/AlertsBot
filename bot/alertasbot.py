@@ -7,11 +7,12 @@ from data import *
 from datetime import datetime
 from traceback import print_exc
 from random import randrange as rd, choice
+import re
 
 import mysql.connector
 import threading
 
-app = Client("GSorteio",
+app = Client("AlertasBot",
             api_id=api_id,
             api_hash=api_hash,
             bot_token=bot_token)
@@ -198,16 +199,21 @@ def monitor(bot, mensagem):
             text = mensagem.caption.lower()
         
         for k, v in produtos.items():
-            if any(p.lower() in text.lower() for p in v):
-                ch = ""
+            if any(re.search(f'\s{p}\s|^{p}$|^{p}\s|\s{p}$', text.lower(), re.IGNORECASE) for p in v):
+                ch = []
                 for p in v:
-                    if p.lower() in text.lower():
-                        ch = str(p.upper())
+                    if len(p) > 0:
+                        if all(pch.lower() in text.lower() for pch in p.split()):
+                            ch.append(str(p.upper()))
 
                 markup = InlineKeyboardMarkup([[InlineKeyboardButton("❇️ Ir para a oferta", url=url)]])
 
-                app.send_message(k, "🚨" + '"' + ch + '" ' f"encontramos uma oferta no canal {title}.\n\nNão deixe de conferir!", reply_markup=markup)
-                print(f"Oferta encaminhada para {k}")
+                for c in ch:
+                    try:
+                        app.send_message(k, "🚨" + '"' + c + '" ' f"encontramos uma oferta no canal {title}.\n\nNão deixe de conferir!", reply_markup=markup)
+                        print(f"Oferta de {c} encaminhada para {k}\n")
+                    except Exception:
+                        print("Falha ao enviar, o usúario bloqueou o bot!")
     
     
 ############# UTILS #############
@@ -306,7 +312,7 @@ def callRpd(bot, call):
     if user_id not in add_produto:
         add_produto.append(user_id)
 
-    app.send_message(user_id, "Envie o produto que deseja cadastrar")
+    app.send_message(user_id, "Digite os produtos do seu interesse, separados por VIRGULA:\n\nEx: iphone, geladeira, Televisão")
 
 @app.on_callback_query(filters.regex("^help_delpd"))
 def callRlist(bot, call):
