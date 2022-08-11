@@ -1,0 +1,13 @@
+[bot]
+api_id=
+api_hash=
+bot_token=
+
+[MySQL]
+host=
+user=
+pass=
+name=
+
+[adm]
+user_id=
