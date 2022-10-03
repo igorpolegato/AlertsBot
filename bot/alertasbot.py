@@ -33,7 +33,10 @@ def bd():
         host=dbhost,
         user=dbuser,
         password=dbpasswd,
-        database=dbname
+        database=dbname,
+        connect_timeout=1000,
+        wait_timeout=28800,
+        interactive_timeout=28800
     )
 
     cur = con.cursor(buffered=True) # cursor para criar tabelas
