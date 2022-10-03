@@ -27,7 +27,7 @@ dados = lambda mensagem: [mensagem.chat.id, mensagem.chat.first_name, mensagem.t
 ################## MySQL #################
 
 def bd():
-    global con, cur1, cur2, cur3
+    global con, cur1, cur2
 
     con = mysql.connector.connect(
         host=dbhost,
@@ -39,7 +39,6 @@ def bd():
     cur = con.cursor(buffered=True) # cursor para criar tabelas
     cur1 = con.cursor(buffered=True) # cursor para tabela clientes
     cur2 = con.cursor(buffered=True) # cursor para tabela pchaves
-    cur3 = con.cursor(buffered=True) # 
 
     cur.execute(
         "create table if not exists clientes("
@@ -54,6 +53,10 @@ def bd():
         "id int auto_increment primary key,"
         "user_cod bigint not null,"
         "produto varchar(100) not null)"
+    )
+
+    cur.execute(
+        "set max_allowed_packet=67108864"
     )
 
 ############## COMANDOS ####################
@@ -175,15 +178,18 @@ def interact(bot, mensagem):
 
 @app.on_message(filters.channel)
 def monitor(bot, mensagem):
-    group_id = mensagem.chat.id
+    group_id = int(mensagem.chat.id)
 
-    if group_id == -1001429192579:
+    if group_id in [-1001429192579, -1001529185476, -1001740029675]:
+        
         m_id = mensagem.id
         title = mensagem.chat.title
         media = str(mensagem.media).replace("MessageMediaType.", "").lower()
         url = f"https://t.me/c/{str(group_id)[3:]}/{m_id}"
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("❇️ Ir para a oferta", url=url)]])
         produtos = {}
-
+        ch = {}
+        
         for p in bdMap(2, "select * from pchaves"):
             
             if p[1] not in produtos.keys():
@@ -198,23 +204,50 @@ def monitor(bot, mensagem):
         else:
             text = mensagem.caption.lower()
         
-        for k, v in produtos.items():
-            if any(re.search(f'\s{p}\s|^{p}$|^{p}\s|\s{p}$', text.lower(), re.IGNORECASE) for p in v):
-                ch = []
-                for p in v:
-                    if len(p) > 0:
-                        if all(pch.lower() in text.lower() for pch in p.split()):
-                            ch.append(str(p.upper()))
+        for user, prod in produtos.items():
+            try:
+                try:
+                    app.get_chat_member(group_id, user)
+                    for p in prod:
+                        words = []
+                        if p != '':
+                            for word in p.split():
+                                new = ''
+                                for w in word:
+                                    
+                                    if w not in ['+', '\\']:
+                                        new += w
 
-                markup = InlineKeyboardMarkup([[InlineKeyboardButton("❇️ Ir para a oferta", url=url)]])
+                                    else:
+                                        new += f"\\{w}"
+                                new = f"($({new})|\s+({new})|({new})\s+|({new})$)"
 
-                for c in ch:
-                    try:
-                        app.send_message(k, "🚨" + '"' + c + '" ' f"encontramos uma oferta no canal {title}.\n\nNão deixe de conferir!", reply_markup=markup)
-                        print(f"Oferta de {c} encaminhada para {k}\n")
-                    except Exception:
-                        print("Falha ao enviar, o usúario bloqueou o bot!")
-    
+                                words.append(new)
+                                
+                            finded = len(re.findall(fr"{r'(?:.*)'.join(words)}", text.lower(), re.IGNORECASE))
+
+                            if finded > 0:
+                                if not user in ch.keys():
+                                    ch[user] = []
+
+                                ch[user].append(p.upper())
+
+                except Exception:
+                    continue
+            
+            except Exception as e:
+                with open("202.txt", "a", encoding="utf-8") as arq:    
+                    arq.write(f"[{datetime.now().strftime('%x %X.%f')}] ")
+                    arq.write(f"Erro ({e}): {[p for p in prod]}\n\n")
+
+        for u, items in ch.items():
+            for item in items:
+                try:
+                    app.send_message(u, "🚨" + '"' + item + '" ' f"encontramos uma oferta no canal {title}.\n\nNão deixe de conferir!", reply_markup=markup)
+                    print(f"Oferta de {item} encaminhada para {u}\n")
+                    
+                except Exception:
+                    print("Falha ao enviar, o usúario bloqueou o bot!\n")
     
 ############# UTILS #############
 
@@ -262,7 +295,6 @@ def bdMap(c, sql, var=None,  method="select"): #Interações com banco de dados
     cursors = {
         1: cur1,
         2: cur2,
-        3: cur3,
     }
 
     lock.acquire(True)
